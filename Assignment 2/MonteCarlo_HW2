@@ -1,0 +1,111 @@
+using Distributions
+N1, N2 = 1000, 10000
+seed = 123456
+
+# define coefficients for run-up test run-up test statistic
+b = [1/6, 5/24, 11/120, 19/720, 29/5040, 1/840]
+a = [
+    4529.4   9044.9  13568   18091   22615   27892;
+    9044.9   18097   27139   36187   45234   55789;
+    13568    27139   40721   54281   67852   83685;
+    18091    36187   54281   72414   90470   111580;
+    22615    45234   67852   90470   113262  139476;
+    27892    55789   83685   111580  139476  172860
+]
+
+x0, x1 = 1, 1
+
+# ---------------------
+# Chapter 2 Problem 4
+# ---------------------
+function fibonacci_generator(N, x0, x1)
+    sample = [x0, x1] 
+    M = 2^31
+    for k in 1:(N-2)
+        x2 = mod(x1 + x0, M) # lagged Fibonacci generator
+        push!(sample, x2) # collect each generated sample
+        x0 = x1
+        x1 = x2
+    end
+    return sample / M # return entire pseudorandom sequence
+end
+
+function ks_test(sample::Array)
+    N=length(sample)
+    order=sort(sample)
+    dplus=0
+    dminus=0
+    # compute KS-statistic -> take maximum difference in empirical and theoretical cdf values
+    for k in 1:N
+        dplus=max(dplus,k/N-order[k]) 
+    end
+    for k in 1:N
+        dminus=max(dminus,order[k]-(k-1)/N)
+    end
+    return max(dplus,dminus) # return the KS-statistic
+end
+
+# ---------------------
+# Chapter 2 Problem 12
+# ---------------------
+function runup_test(N, seed)
+    x0 = seed
+    runups = Int[]
+    run_length = 1
+    for i in 0:N
+        x1 = mod(8*x0, 67100963) # multiplicative congruential generator
+        if x1 > x0
+            run_length += 1 # length of run i
+        else
+            push!(runups, run_length)
+            run_length = 1 # reset count when run-up ends (next value < previous value)
+        end
+        x0 = x1
+    end
+    push!(runups, run_length)
+    return runups # return all run-ups in sequence
+end
+
+function runup_statistic(runups, a, b, N)
+    # count number of run-ups of length 1-5 or length 6 or more
+    u = [
+        count(==(1), runups),
+        count(==(2), runups),
+        count(==(3), runups),
+        count(==(4), runups),
+        count(==(5), runups),
+        count(x -> x >= 6, runups)
+    ]
+    print("\n1: ", u[1], "\n2: ", u[2], "\n3: ", u[3], "\n4: ", u[4], "\n5: ", u[5], "\n6: ", u[6], "\n")
+    r = 0.0
+    for j in 1:6
+        for i in 1:6
+            r += (u[i] - N*b[i]) * (u[j] - N*b[j]) * a[i, j] # compute run-up statistic w/ pre-defined coefficients
+        end
+    end
+    return r / N
+end
+
+# ---------------------
+# Test Results
+# ---------------------
+
+# Apply the KS-test to the Fibonacci generator for N=1000 samples w/ seeds x0=x1=1
+sample = fibonacci_generator(N1, x0, x1)
+ks_stat = ks_test(sample)
+println(ks_stat)
+modified_ks_stat = ks_stat * (sqrt(N1) + 0.12 + (0.11/sqrt(N1))) # compute modified test statistic for large sample size
+println(modified_ks_stat)
+
+# Perform the run-up test for N=10000 samples w/ seed=123456
+runs = runup_test(N2,seed)
+run_stat = runup_statistic(runs, a, b, N2)
+println(run_stat)
+# calculate 90%,95%,99% critical values for chi-squared disttribution with 6 degrees of freedom
+d = Chisq(6)
+critical_value_90 = quantile(d, 0.90)
+critical_value_95 = quantile(d, 0.95)
+critical_value_99 = quantile(d, 0.99)
+println("90% critical value:", critical_value_90)
+println("95% critical value:", critical_value_95)
+println("99% critical value:", critical_value_99)
